@@ -18,14 +18,12 @@ async def validar_token_websocket(websocket: WebSocket):
         raise HTTPException(status_code=401, detail="Token de autenticação ausente")
 
     try:
-        # 1. Decodifica e valida o token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         
         user_id: str = payload.get("sub")
         if user_id is None:
             raise JWTError
             
-        # 2. Verificação de expiração
         if payload.get("exp") is not None and payload.get("exp") < time.time():
             raise JWTError
 
@@ -35,8 +33,6 @@ async def validar_token_websocket(websocket: WebSocket):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token inválido")
         raise HTTPException(status_code=401, detail="Token inválido")
 
-
-# --- FERRAMENTA DE TESTE (Rodar localmente se precisar de um token) ---
 def create_access_token(user_id: str, expires_delta_seconds: int = 3600):
     """Cria um token JWT para fins de teste."""
     to_encode = {"sub": user_id}
@@ -44,7 +40,3 @@ def create_access_token(user_id: str, expires_delta_seconds: int = 3600):
     to_encode.update({"exp": expire})
     
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-# Para gerar um token:
-# from auth import create_access_token
-# print(create_access_token("user_123"))
