@@ -5,16 +5,19 @@ import asyncio
 import json
 import os
 import time
-from .auth import validar_token_websocket
+
+# LINHA CORRIGIDA: Importação Absoluta (deve funcionar com uvicorn main:app)
+from auth import validar_token_websocket 
 
 # --- CONFIGURAÇÃO DE AMBIENTE ---
+# No EasyPanel, use o nome do serviço Redis e configure a senha.
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost") 
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None) # <--- VARIÁVEL DE SENHA AQUI
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None) 
 
 # Canais e Filas
-TASK_QUEUE = "task_queue_processing" 
-PUB_SUB_CHANNEL = "websocket_broadcast" 
+TASK_QUEUE = "task_queue_processing" # Fila de trabalho (Redis List)
+PUB_SUB_CHANNEL = "websocket_broadcast" # Canal de broadcast (Redis Pub/Sub)
 # --------------------------------
 
 app = FastAPI()
@@ -23,7 +26,7 @@ app = FastAPI()
 redis_client = Redis(
     host=REDIS_HOST, 
     port=REDIS_PORT, 
-    password=REDIS_PASSWORD, # <--- APLICAÇÃO DA SENHA AQUI
+    password=REDIS_PASSWORD, 
     decode_responses=True
 )
 
@@ -38,6 +41,7 @@ class ConnectionManager:
         self.active_connections[user_id] = websocket
 
     def disconnect(self, user_id: str):
+        # Remove o usuário de todos os tópicos
         for topic in list(self.topic_subscriptions.keys()):
              self.unsubscribe(user_id, topic)
         if user_id in self.active_connections:
@@ -59,7 +63,7 @@ class ConnectionManager:
                  except RuntimeError:
                     self.topic_subscriptions[topic].discard(connection)
 
-    # Lógica de Rotas Dinâmicas
+    # Lógica de Rotas Dinâmicas (Tópicos/Salas)
     def subscribe(self, user_id: str, topic: str):
         if user_id in self.active_connections:
             websocket = self.active_connections[user_id]
@@ -96,7 +100,7 @@ async def redis_listener(manager: ConnectionManager):
                 
                 try:
                     msg_data = json.loads(data)
-                    target = msg_data.get('target') 
+                    target = msg_data.get('target') # user:ID ou topic:NOME
                     payload = msg_data.get('payload') 
 
                     if target and target.startswith('user:'):
@@ -119,7 +123,7 @@ async def redis_listener(manager: ConnectionManager):
 @app.websocket("/ws") 
 async def websocket_endpoint(
     websocket: WebSocket, 
-    auth_data: dict = Depends(validar_token_websocket)
+    auth_data: dict = Depends(validar_token_websocket) # Requisito de Segurança (JWT)
 ):
     user_id = auth_data["user_id"] 
     
@@ -141,7 +145,7 @@ async def websocket_endpoint(
                         manager.subscribe(user_id, topic)
 
                 elif action == "message":
-                    # PRODUTOR DE FILA: Envia a tarefa para o Worker
+                    # PRODUTOR DE FILA: Envia a tarefa para o Worker (Tratamento ideal de filas)
                     topic = message.get("topic")
                     content = message.get("content")
                     if topic and content:
@@ -166,10 +170,11 @@ async def websocket_endpoint(
         print(f"Cliente {user_id} desconectado.")
 
 
-# --- 4. Inicialização e Teste de Broadcast (Worker Simulador) ---
+# --- 4. Inicialização e Rota de Teste de Broadcast ---
 
 @app.on_event("startup")
 async def startup_event():
+    # Inicia o Listener do Redis em background para receber atualizações
     asyncio.create_task(redis_listener(manager))
 
 @app.post("/api/publish_broadcast")
