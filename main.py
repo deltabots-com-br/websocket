@@ -4,20 +4,28 @@ from redis import Redis
 import asyncio
 import json
 import os
+import time
 from .auth import validar_token_websocket
 
 # --- CONFIGURAÇÃO DE AMBIENTE ---
-# No EasyPanel, use o nome do serviço Redis (ex: 'redis-service' ou o IP)
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost") 
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None) # <--- VARIÁVEL DE SENHA AQUI
 
 # Canais e Filas
-TASK_QUEUE = "task_queue_processing" # Fila de trabalho (Redis List)
-PUB_SUB_CHANNEL = "websocket_broadcast" # Canal de broadcast (Redis Pub/Sub)
+TASK_QUEUE = "task_queue_processing" 
+PUB_SUB_CHANNEL = "websocket_broadcast" 
 # --------------------------------
 
 app = FastAPI()
-redis_client = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+# Inicialização do cliente Redis com a senha
+redis_client = Redis(
+    host=REDIS_HOST, 
+    port=REDIS_PORT, 
+    password=REDIS_PASSWORD, # <--- APLICAÇÃO DA SENHA AQUI
+    decode_responses=True
+)
 
 # --- 1. Gerenciador de Conexões ---
 class ConnectionManager:
@@ -88,7 +96,7 @@ async def redis_listener(manager: ConnectionManager):
                 
                 try:
                     msg_data = json.loads(data)
-                    target = msg_data.get('target') # user:ID ou topic:NOME
+                    target = msg_data.get('target') 
                     payload = msg_data.get('payload') 
 
                     if target and target.startswith('user:'):
@@ -111,7 +119,7 @@ async def redis_listener(manager: ConnectionManager):
 @app.websocket("/ws") 
 async def websocket_endpoint(
     websocket: WebSocket, 
-    auth_data: dict = Depends(validar_token_websocket) # Requisito de Segurança
+    auth_data: dict = Depends(validar_token_websocket)
 ):
     user_id = auth_data["user_id"] 
     
@@ -162,7 +170,6 @@ async def websocket_endpoint(
 
 @app.on_event("startup")
 async def startup_event():
-    # Inicia o Listener do Redis em background para receber atualizações
     asyncio.create_task(redis_listener(manager))
 
 @app.post("/api/publish_broadcast")
