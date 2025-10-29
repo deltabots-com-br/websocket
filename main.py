@@ -6,18 +6,17 @@ import json
 import os
 import time
 
-# CORREÇÃO: Importação Absoluta para resolver o 'ImportError' do Uvicorn
+# CORREÇÃO FINAL: Importação Absoluta
 from auth import validar_token_websocket 
 
 # --- CONFIGURAÇÃO DE AMBIENTE ---
-# Use variáveis de ambiente no EasyPanel para estas configurações
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost") 
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None) # Senha do Redis
 
 # Canais e Filas
-TASK_QUEUE = "task_queue_processing" # Fila de trabalho (consumida pelo worker.py)
-PUB_SUB_CHANNEL = "websocket_broadcast" # Canal de broadcast (para respostas)
+TASK_QUEUE = "task_queue_processing" 
+PUB_SUB_CHANNEL = "websocket_broadcast" 
 # --------------------------------
 
 app = FastAPI()
@@ -26,12 +25,13 @@ app = FastAPI()
 redis_client = Redis(
     host=REDIS_HOST, 
     port=REDIS_PORT, 
-    password=REDIS_PASSWORD, # Autenticação de Segurança
+    password=REDIS_PASSWORD, 
     decode_responses=True
 )
 
 # --- 1. Gerenciador de Conexões ---
 class ConnectionManager:
+    # ... (código da ConnectionManager é o mesmo) ...
     def __init__(self):
         self.active_connections: dict[str, WebSocket] = {}
         self.topic_subscriptions: dict[str, set[WebSocket]] = {}
@@ -62,7 +62,6 @@ class ConnectionManager:
                  except RuntimeError:
                     self.topic_subscriptions[topic].discard(connection)
 
-    # Lógica de Rotas Dinâmicas (Tópicos/Salas)
     def subscribe(self, user_id: str, topic: str):
         if user_id in self.active_connections:
             websocket = self.active_connections[user_id]
@@ -144,7 +143,7 @@ async def websocket_endpoint(
                         manager.subscribe(user_id, topic)
 
                 elif action == "message":
-                    # PRODUTOR DE FILA: Envia a tarefa para o Worker (tratamento assíncrono)
+                    # PRODUTOR DE FILA: Envia a tarefa para o Worker
                     topic = message.get("topic")
                     content = message.get("content")
                     if topic and content:
@@ -173,12 +172,12 @@ async def websocket_endpoint(
 
 @app.on_event("startup")
 async def startup_event():
-    # Inicia o Listener do Redis em background
     asyncio.create_task(redis_listener(manager))
 
 @app.post("/api/publish_broadcast")
 def publish_broadcast(item: dict):
-    """Endpoint HTTP para um worker EXTERNO enviar um broadcast via Redis Pub/Sub."""
+    """Endpoint HTTP para um worker EXTERNO enviar um broadcast via Redis Pub/Sub.
+       Isso também serve como documentação Swagger/OpenAPI."""
     target = item.get("target", "topic:general") 
     payload = item.get("payload", {"status": "ok"})
     
